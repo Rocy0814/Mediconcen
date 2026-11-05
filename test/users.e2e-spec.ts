@@ -4,6 +4,8 @@ import { randomUUID } from 'node:crypto';
 import request from 'supertest';
 import { App } from 'supertest/types';
 import { DataSource } from 'typeorm';
+import { createClient } from 'redis';
+import { userCacheKey } from '../src/users/user-cache.service';
 import { AppModule } from '../src/app.module';
 import { UserMapping } from '../src/users/user-mapping.entity';
 import { UsersService } from '../src/users/users.service';
@@ -25,6 +27,26 @@ describe('POST /users/resolve (MySQL)', () => {
 
   afterAll(async () => {
     if (source?.isInitialized) {
+      const rows = await source
+        .getRepository(UserMapping)
+        .findBy({ id1: prefix });
+      const redis = createClient({
+        url: process.env.REDIS_URL ?? 'redis://127.0.0.1:6379',
+        socket: { reconnectStrategy: false, connectTimeout: 500 },
+      });
+      redis.on('error', () => undefined);
+      try {
+        await redis.connect();
+        if (rows.length) {
+          await redis
+            .withCommandOptions({ timeout: 200 })
+            .del(rows.map((row) => userCacheKey(row.id1, row.id2)));
+        }
+      } catch {
+        // When Redis is unavailable, these test entries expire on their own.
+      } finally {
+        if (redis.isOpen) redis.destroy();
+      }
       await source
         .getRepository(UserMapping)
         .createQueryBuilder()

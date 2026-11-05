@@ -72,3 +72,30 @@ npm run test:e2e
 It tests the endpoint against MySQL, including 20 concurrent requests for one pair.
 Tests use a random ID prefix and remove their own records afterwards. The root
 controller smoke test runs without MySQL.
+
+## Redis cache
+
+Redis caches successful ID lookups for one hour by default. MySQL remains the
+permanent source of data and enforces uniqueness. A cache miss reads from MySQL
+and caches the result only after the database operation succeeds.
+
+To start the provided Redis service:
+
+```sh
+docker compose up -d --wait redis
+```
+
+If you already have Redis running, skip this and point `REDIS_URL` in `.env` to
+it (default: `redis://127.0.0.1:6379`). Set `REDIS_TTL_SECONDS` to change the
+expiry. Credentials, if needed, belong in `.env`, not in source code.
+
+Redis connects and reconnects in the background. While disconnected, requests
+use MySQL directly. Commands time out after 200 ms; failed cache reads and writes
+do not fail the API request. Keys encode the ordered pair as a JSON array to
+avoid delimiter collisions. Mappings have no update/delete endpoint, so no cache
+invalidation is needed for this API. If the database is reset manually, clear
+its corresponding cache entries as well.
+
+Run `npm run test:redis` with MySQL and Redis available to check cache hits,
+expiry and fallback after a disconnected cache. It uses random test IDs, sets a
+one-second TTL, and removes its records afterwards.

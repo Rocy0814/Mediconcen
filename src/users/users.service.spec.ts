@@ -1,4 +1,5 @@
 import { QueryFailedError, Repository } from 'typeorm';
+import { UserCacheService } from './user-cache.service';
 import { UserMapping } from './user-mapping.entity';
 import { UsersService } from './users.service';
 
@@ -10,16 +11,26 @@ const duplicate = new QueryFailedError(
 
 describe('UsersService', () => {
   const mappings = { findOneBy: jest.fn(), insert: jest.fn() };
+  const cache = { get: jest.fn(), set: jest.fn() };
   const service = new UsersService(
     mappings as unknown as Repository<UserMapping>,
+    cache as unknown as UserCacheService,
   );
 
   beforeEach(() => jest.resetAllMocks());
+
+  it('returns a cache hit without querying MySQL', async () => {
+    cache.get.mockResolvedValue('cached-id');
+    await expect(service.resolve('A', 'B')).resolves.toBe('cached-id');
+    expect(mappings.findOneBy).not.toHaveBeenCalled();
+    expect(mappings.insert).not.toHaveBeenCalled();
+  });
 
   it('returns the existing ID without inserting', async () => {
     mappings.findOneBy.mockResolvedValue({ userID: 'existing-id' });
     await expect(service.resolve('A', 'B')).resolves.toBe('existing-id');
     expect(mappings.insert).not.toHaveBeenCalled();
+    expect(cache.set).toHaveBeenCalledWith('A', 'B', 'existing-id');
   });
 
   it('inserts a UUID v4 for a new pair', async () => {
@@ -55,5 +66,6 @@ describe('UsersService', () => {
     mappings.insert.mockRejectedValue(error);
     await expect(service.resolve('A', 'B')).rejects.toBe(error);
     expect(mappings.findOneBy).toHaveBeenCalledTimes(1);
+    expect(cache.set).not.toHaveBeenCalled();
   });
 });
