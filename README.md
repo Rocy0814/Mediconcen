@@ -31,7 +31,21 @@ npm run start:dev
 ```
 
 The app runs at `http://localhost:3000`. For now, `GET /` returns `Hello World!`.
-The ID lookup endpoint is the next step.
+
+## Resolve a user ID
+
+```sh
+curl -X POST http://localhost:3000/users/resolve \
+  -H 'Content-Type: application/json' \
+  -d '{"id1":"ABC123","id2":"XYZ456"}'
+```
+
+Returns HTTP 200 with `{ "userID": "<UUID v4>" }`. Repeating the same pair returns
+its original ID, including when requests arrive concurrently.
+
+Both IDs must be strings of 1–128 characters, without leading or trailing
+whitespace. Unknown fields are rejected. Invalid requests return 400;
+unexpected failures return 500 without database details.
 
 ## Database
 
@@ -54,5 +68,7 @@ npm test
 npm run test:e2e
 ```
 
-The HTTP smoke test covers the root controller without connecting to MySQL.
-Database integration tests will be added with the lookup endpoint.
+`npm run test:e2e` requires the configured MySQL database with migrations applied.
+It tests the endpoint against MySQL, including 20 concurrent requests for one pair.
+Tests use a random ID prefix and remove their own records afterwards. The root
+controller smoke test runs without MySQL.
